@@ -2,6 +2,11 @@
   "name": "rpm-spec-auto-changelog",
   "displayName": "RPM Spec Auto Changelog",
   "description": "Auto generate RPM Spec Changelog",
+  "publisher": "rbqworks",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rbqworks/rpm-spec-auto-changelog.git"
+  },
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.98.0"
@@ -18,10 +23,6 @@
         "title": "RPM Spec: Generate Changelog"
       }
     ]
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/rbqworks/rpm-spec-auto-changelog.git"
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
