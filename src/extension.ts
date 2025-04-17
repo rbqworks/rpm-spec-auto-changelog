@@ -25,22 +25,52 @@ export function activate(context: vscode.ExtensionContext) {
 		 */
 		const text = editor.document.getText();
 		const lines = text.split('\n');
-		let version = '';
-		let release = '';
 
-		// Get the version and release from the SPEC file
-		for (let i = 0; i < lines.length; i++) {
-			if (lines[i].startsWith('Version:')) {
-				version = lines[i].split(':')[1].trim();
-			}
-			if (lines[i].startsWith('Release:')) {
-				release = lines[i].split(':')[1].trim();
+		// Collect macro definitions
+		const macros: Record<string, string> = {};
+		for (const line of lines) {
+			const m = line.match(/^%(?:global|define)\s+(\w+)\s+(.*)$/);
+			if (m) {
+				const [, name, val] = m;
+				macros[name] = val.trim();
 			}
 		}
+
+		// Recursively expand macros
+		function expandMacros(str: string): string {
+			return str.replace(/%\{([^}]+)\}/g, (_, name) => {
+				const val = macros[name];
+				return val !== undefined ? expandMacros(val) : _;
+			});
+		}
+
+		// Find and expand Version/Release/Epoch
+		let versionTemplate = '';
+		let releaseTemplate = '';
+		let epochTemplate = '';
+		for (const line of lines) {
+			if (line.startsWith('Version:')) {
+				versionTemplate = line.split(':')[1].trim();
+			}
+			if (line.startsWith('Release:')) {
+				releaseTemplate = line.split(':')[1].trim();
+			}
+			if (line.startsWith('Epoch:')) {
+				epochTemplate = line.split(':')[1].trim();
+			}
+		}
+
+		const version = versionTemplate ? expandMacros(versionTemplate) : '';
+		const release = releaseTemplate ? expandMacros(releaseTemplate) : '';
+		const epoch = epochTemplate ? expandMacros(epochTemplate) : '';
+
 		if (!version || !release) {
 			vscode.window.showErrorMessage('Version or Release not found in the SPEC file!');
 			return;
 		}
+
+		// Build changelog entry with optional epoch
+		const epochPrefix = epoch ? `${epoch}:` : '';
 		// Get the current date
 		const currentDate = new Date().toDateString();
 		// Get the current git user name and email
@@ -54,7 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		// Generate the changelog
-		const changelog = `* ${currentDate} ${gitUserName} <${gitUserEmail}> - ${version}-${release}`;
+		const changelog = `* ${currentDate} ${gitUserName} <${gitUserEmail}> - ${epochPrefix}${version}-${release}`;
 		// Insert the changelog at the current cursor position with new line
 		editor.edit((editBuilder) => {
 			editBuilder.insert(editor.selection.active, changelog + '\n' + '- ');
@@ -64,4 +94,69 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(disposable);
+
+	const bumpDisposable = vscode.commands.registerCommand('rpm-spec-auto-changelog.bumpReleaseNumber', () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showErrorMessage('No active text editor found!');
+			return;
+		}
+
+		const doc = editor.document;
+		const text = doc.getText();
+		const lines = text.split('\n');
+
+		// Collect macro definitions
+		const macros: Record<string, string> = {};
+		for (const line of lines) {
+			const m = line.match(/^%(?:global|define)\s+(\w+)\s+(.*)$/);
+			if (m) {
+				const [, name, val] = m;
+				macros[name] = val.trim();
+			}
+		}
+
+		// Recursively expand macros
+		function expandMacros(str: string): string {
+			return str.replace(/%\{([^}]+)\}/g, (_, name) => {
+				const val = macros[name];
+				return val !== undefined ? expandMacros(val) : _;
+			});
+		}
+
+		// Find the Version: line
+		let releaseLineIndex = -1;
+		let releaseTemplate = '';
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].startsWith('Release:')) {
+				releaseLineIndex = i;
+				releaseTemplate = lines[i].split(':')[1].trim();
+				break;
+			}
+		}
+		if (releaseLineIndex < 0) {
+			vscode.window.showErrorMessage('Release not found in the SPEC file!');
+			return;
+		}
+
+		// Expand and bump
+		const expanded = expandMacros(releaseTemplate);
+		const n = parseInt(expanded, 10);
+		if (isNaN(n)) {
+			vscode.window.showErrorMessage(`Cannot bump non-integer release "${expanded}"`);
+			return;
+		}
+		const bumped = (n + 1).toString();
+
+		// Replace the Version: line with bumped value
+		const lineRange = doc.lineAt(releaseLineIndex).range;
+		const newLine = `Release: ${bumped}`;
+		editor.edit((editBuilder) => {
+			editBuilder.replace(lineRange, newLine);
+		});
+
+		vscode.window.showInformationMessage(`Version bumped to ${bumped}`);
+	});
+
+	context.subscriptions.push(bumpDisposable);
 }

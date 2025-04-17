@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/rbqworks/rpm-spec-auto-changelog.git"
   },
-  "version": "0.0.1",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.98.0"
   },
@@ -21,6 +21,10 @@
       {
         "command": "rpm-spec-auto-changelog.generateChangelog",
         "title": "RPM Spec: Generate Changelog"
+      },
+      {
+        "command": "rpm-spec-auto-changelog.bumpReleaseNumber",
+        "title": "RPM Spec: Bump Release Number"
       }
     ]
   },
@@ -42,5 +46,6 @@
     "typescript": "^5.7.3",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1"
-  }
+  },
+  "packageManager": "npm@11.2.0+sha512.3dc9c50ba813a3d54393155a435fe66404b72685ab0e3008f9ae9ed8d81f6104860f07ed2656dd5748c1322d95f3140fa9b19c59a6bba7750fd12285f81866da"
 }
