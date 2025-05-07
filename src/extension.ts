@@ -124,38 +124,66 @@ export function activate(context: vscode.ExtensionContext) {
 			});
 		}
 
-		// Find the Version: line
 		let releaseLineIndex = -1;
-		let releaseTemplate = '';
+		let releaseTagPart = ''; // e.g., "Release:" (includes the colon)
+		let releaseValuePartWithOriginalSpacing = ''; // e.g., "        1.rocm%{rocm_version}"
+
 		for (let i = 0; i < lines.length; i++) {
-			if (lines[i].startsWith('Release:')) {
-				releaseLineIndex = i;
-				releaseTemplate = lines[i].split(':')[1].trim();
-				break;
+			const line = lines[i];
+			const colonIndex = line.indexOf(':');
+			if (colonIndex > 0) { // Ensure there is a colon and a tag name before it
+				const tag = line.substring(0, colonIndex).trim();
+				if (tag.toLowerCase() === 'release') {
+					releaseLineIndex = i;
+					releaseTagPart = line.substring(0, colonIndex + 1); // Captures "Tag:"
+					releaseValuePartWithOriginalSpacing = line.substring(colonIndex + 1); // Captures value with spacing
+					break;
+				}
 			}
 		}
+
 		if (releaseLineIndex < 0) {
-			vscode.window.showErrorMessage('Release not found in the SPEC file!');
+			vscode.window.showErrorMessage('Release not found in the SPEC file (e.g., "Release: 1")!');
 			return;
 		}
 
-		// Expand and bump
-		const expanded = expandMacros(releaseTemplate);
-		const n = parseInt(expanded, 10);
-		if (isNaN(n)) {
-			vscode.window.showErrorMessage(`Cannot bump non-integer release "${expanded}"`);
-			return;
-		}
-		const bumped = (n + 1).toString();
+		const releaseTemplateTrimmed = releaseValuePartWithOriginalSpacing.trim(); // e.g., "1.rocm%{rocm_version}"
+		let newReleaseValueTrimmed: string;
 
-		// Replace the Version: line with bumped value
+		// Try to bump the numeric prefix of the trimmed release template
+		const releasePattern = /^(\d+)(.*)$/;
+		const matchPattern = releaseTemplateTrimmed.match(releasePattern);
+
+		if (matchPattern) {
+			const numPart = parseInt(matchPattern[1], 10);
+			const suffixPart = matchPattern[2];
+			newReleaseValueTrimmed = (numPart + 1).toString() + suffixPart;
+		} else {
+			// Fallback: expand the whole template and try to bump that
+			const expanded = expandMacros(releaseTemplateTrimmed);
+			const n = parseInt(expanded, 10);
+			if (isNaN(n)) {
+				vscode.window.showErrorMessage(`Cannot bump non-integer release "${expanded}" (from template "${releaseTemplateTrimmed}")`);
+				return;
+			}
+			newReleaseValueTrimmed = (n + 1).toString();
+		}
+		
+		// Reconstruct the line preserving original spacing for the value part
+		const valueActualStart = releaseValuePartWithOriginalSpacing.indexOf(releaseTemplateTrimmed);
+		const prefixSpacing = releaseValuePartWithOriginalSpacing.substring(0, valueActualStart);
+		const suffixSpacing = releaseValuePartWithOriginalSpacing.substring(valueActualStart + releaseTemplateTrimmed.length);
+
+		const newReleaseValueWithOriginalSpacing = prefixSpacing + newReleaseValueTrimmed + suffixSpacing;
+		
+		const finalNewLine = `${releaseTagPart}${newReleaseValueWithOriginalSpacing}`;
+
 		const lineRange = doc.lineAt(releaseLineIndex).range;
-		const newLine = `Release: ${bumped}`;
 		editor.edit((editBuilder) => {
-			editBuilder.replace(lineRange, newLine);
+			editBuilder.replace(lineRange, finalNewLine);
 		});
 
-		vscode.window.showInformationMessage(`Version bumped to ${bumped}`);
+		vscode.window.showInformationMessage(`Release bumped from "${releaseTemplateTrimmed}" to "${newReleaseValueTrimmed}"`);
 	});
 
 	context.subscriptions.push(bumpDisposable);
